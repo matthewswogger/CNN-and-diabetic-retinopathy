@@ -67,11 +67,3 @@ model.fit_generator(train_generator,
 # # Final evaluation of the model
 # scores = model.evaluate(X_test, y_test, verbose=0)
 # print("Baseline Error: %.2f%%" % (100-scores[1]*100))
-
-
-
-
-
-
-
-#
