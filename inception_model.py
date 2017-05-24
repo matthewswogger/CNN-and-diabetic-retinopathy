@@ -1,37 +1,10 @@
-import numpy as np
-from keras.models import Sequential
-from keras.layers import Dense, Dropout, Flatten
-from keras.layers.convolutional import Conv2D, MaxPooling2D
+from keras.applications.inception_v3 import InceptionV3
+from keras.preprocessing import image
+from keras.models import Model
+from keras.layers import Dense, GlobalAveragePooling2D
 from keras.preprocessing.image import ImageDataGenerator
-from keras.utils import np_utils
 from keras.callbacks import ModelCheckpoint
 from keras import backend as K
-K.set_image_dim_ordering('th')
-
-def cnn_model():
-    # create model
-    model = Sequential()
-    model.add(Conv2D(filters=32, kernel_size=(3, 3),
-                     input_shape=(3, img_width, img_height), activation='relu'))
-    model.add(MaxPooling2D(pool_size=(2, 2)))
-
-    model.add(Conv2D(filters=32, kernel_size=(3, 3), activation='relu'))
-    model.add(MaxPooling2D(pool_size=(2, 2)))
-
-    model.add(Conv2D(filters=32, kernel_size=(3, 3), activation='relu'))
-    model.add(MaxPooling2D(pool_size=(2, 2)))
-
-    model.add(Flatten())
-    model.add(Dense(units=128, activation='relu'))
-    model.add(Dense(units=num_classes, activation='softmax'))
-    # Compile model
-    model.compile(loss='categorical_crossentropy', optimizer='adam',
-                                                   metrics=['accuracy'])
-    return model
-
-# fix random seed for reproducibility
-seed = 7
-np.random.seed(seed)
 
 # dimensions of our images.
 img_width, img_height = 100, 100
@@ -41,12 +14,27 @@ validation_data_dir = 'data/val'
 batch_size = 16
 num_classes = 5
 
-# build the model
-model = cnn_model()
+# create the base pre-trained model
+base_model = InceptionV3(weights='imagenet', include_top=False)
 
-# save a graph of model
-# from keras.utils import plot_model
-# plot_model(model, to_file='model.png', show_shapes=True, show_layer_names=True)
+# add a global spatial average pooling layer
+x = base_model.output
+x = GlobalAveragePooling2D()(x)
+# let's add a fully-connected layer
+x = Dense(1024, activation='relu')(x)
+# and a logistic layer
+predictions = Dense(num_classes, activation='softmax')(x)
+
+# this is the model we will train
+model = Model(inputs=base_model.input, outputs=predictions)
+
+# first: train only the top layers (which were randomly initialized)
+# i.e. freeze all convolutional InceptionV3 layers
+for layer in base_model.layers:
+    layer.trainable = False
+
+# compile the model (should be done *after* setting layers to non-trainable)
+model.compile(optimizer='rmsprop', loss='categorical_crossentropy')
 
 
 # this is the augmentation configuration we will use for training
@@ -70,11 +58,12 @@ validation_generator = val_datagen.flow_from_directory(validation_data_dir,
                                                         batch_size=batch_size)
 
 # train model with a checkpointer to save the weights after every epoch
-checkpointer = ModelCheckpoint(filepath='weights.{epoch:02d}-{val_acc:.2f}.hdf5')
+# checkpointer = ModelCheckpoint(filepath='weights.{epoch:02d}-{val_acc:.2f}.hdf5')
 
 model.fit_generator(train_generator,
                     steps_per_epoch=50,
-                    epochs=50,
+                    epochs=2,
                     validation_data=validation_generator,
                     validation_steps=30,
-                    callbacks=[checkpointer])
+                    verbose=1)#,
+                    # callbacks=[checkpointer])
